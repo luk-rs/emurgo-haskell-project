@@ -2,33 +2,17 @@ module Menus where
 
 import Control.Monad (forM_)
 import Control.Monad.Reader (ReaderT (runReaderT))
-import Control.Monad.State (MonadIO (liftIO), MonadState (get), StateT (runStateT), forM)
+import Control.Monad.State (MonadIO (liftIO), MonadState (get), StateT (runStateT), forM, modify)
+import Control.Monad.State.Class (gets)
 import Data.Map (Map, fromList, lookup, (!))
 import Sifo (Account, Simulation, emptyAccount, singleMarket)
 import System.Exit (exitSuccess)
 import Text.Read (readMaybe)
 import Prelude hiding (lookup)
 
-type MenuId = Int
-
-data Menu = Menu
-  { mId :: MenuId
-  , mLabel :: String
-  , mEntries :: [Entry]
-  }
-
-type EntryId = Int
-data Entry = Entry
-  { eId :: EntryId
-  , eLabel :: String
-  , eSimulation :: Simulation Navigation
-  }
-
-data Navigation
-  = Forward
-      { fOption :: MenuId
-      }
-  | Back
+import Entry
+import Menu
+import Navigation
 
 startMenu :: Menu
 startMenu =
@@ -104,33 +88,36 @@ renderLoop :: Render ()
 renderLoop = do
   renderer <- get
   let menu = rMenu renderer
-  renderMenu menu
+      id = mId menu
+  navigation <- renderMenu menu
+  case navigation of
+    Back -> return ()
+    Forward target -> do
+      modify $ \renderer -> renderer{rMenu = menusMap ! target}
+      renderLoop
+      modify $ \renderer -> renderer{rMenu = menu}
+      renderLoop
 
--- TODO render Result and loop on the actual loop
-
-renderMenu :: Menu -> Render ()
+renderMenu :: Menu -> Render Navigation
 renderMenu menu = do
   let label = mLabel menu
       entries = mEntries menu
-  putStrLn label
-  printEntries entries
-  putStr "input > "
-  maybe <- readOption entries
+  liftIO $ do
+    putStrLn label
+    printEntries entries
+    putStr "input > "
+  maybe <- liftIO $ readOption entries
   case maybe of
     Nothing -> do
-      putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
+      liftIO $ putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
       renderMenu menu
     Just entry -> do
       let sim = eSimulation entry
-      (navigation, updatedAccount) <- runStateT (runReaderT sim singleMarket) emptyAccount -- TODO review this empty account
-      -- probabaly we should use the renderer acocunt above ;)
-      -- TODO choose what to do here with updated account
-      -- modify the renderer account with the updated account
-      case navigation of
-        Forward id -> do
-          renderMenu $ menusMap ! id
-          renderMenu menu
-        Back -> return ()
+      (navigation, updatedAccount) <- do
+        account <- gets rAccount
+        liftIO $ runStateT (runReaderT sim singleMarket) account
+      modify $ \renderer -> renderer{rAccount = updatedAccount}
+      return navigation
 
 printEntries :: [Entry] -> IO ()
 printEntries [] = return ()
