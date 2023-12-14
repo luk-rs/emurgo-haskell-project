@@ -1,29 +1,23 @@
 module Main where
 
-import Control.Monad.Reader (
-  MonadIO (liftIO),
-  MonadReader (ask),
-  ReaderT (runReaderT),
- )
 import Control.Monad.State (StateT (runStateT))
-import GHC.IO.Handle (hSetEcho)
+import GHC.IO.Handle (hSetBuffering, hSetEcho)
+import System.IO (BufferMode (LineBuffering, NoBuffering), stdin, stdout)
+
 import Menus (defaultRenderer, renderLoop)
-import Sifo (Book, Market (manualBookIO, randomizeBookIO), Simulation, emptyAccount, singleMarket)
-import System.IO (stdin)
 
 setup :: IO ()
 setup = do
-  hSetEcho stdin False
+  hSetBuffering stdout NoBuffering
+
+flush :: IO ()
+flush = do
+  hSetBuffering stdout LineBuffering
 
 main :: IO ()
 main = do
-  runStateT renderLoop defaultRenderer
-  -- runStateT (flip runReaderT singleMarket $ runBook randomizeBookIO) emptyAccount
-  -- _ <- getChar
-  putStrLn "gudbai"
+  setup
+  (_, _) <- runStateT renderLoop defaultRenderer
+  flush
 
--- runBook :: (Market -> IO Book) -> Simulation ()
--- runBook run = do
---   market <- ask
---   book <- liftIO $ run market
---   return ()
+-- runStateT (flip runReaderT singleMarket $ runBook randomizeBookIO) emptyAccount
