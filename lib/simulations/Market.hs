@@ -1,15 +1,16 @@
-module Sifo where
+module Market where
 
-import Control.Monad.Reader
-import Control.Monad.State
 import System.Random (randomRIO)
 import Text.Read (readMaybe)
 
 type Price = Double
-type Amount = Double
-type Id = Double
 
-type Simulation a = ReaderT Market (StateT Account IO) a
+data Ticker = BTC | ADA | IUSD deriving (Show)
+
+data Book = Book
+  { bBtc :: Price
+  , bAda :: Price
+  }
 
 data Market = Market
   { randomizeBookIO :: IO Book
@@ -39,7 +40,6 @@ bookFromRandom = do
 readDouble :: IO (Maybe Double)
 readDouble = readMaybe <$> getLine
 
-data Ticker = BTC | ADA | IUSD deriving (Show)
 priceFor :: Ticker -> IO Double
 priceFor ticker = do
   putStrLn $ "Please insert $USD value for the following ticker =>" ++ show ticker
@@ -58,44 +58,3 @@ bookFromInput = do
       { bBtc = btcPrice
       , bAda = adaPrice
       }
-
-data Book = Book
-  { bBtc :: Price
-  , bAda :: Price
-  }
-
-data Account = Account
-  { acId :: Id
-  , acContract :: Contract
-  , acStake :: Asset
-  }
-
-emptyAccount :: Account
-emptyAccount =
-  Account
-    { acId = 231.231
-    , acContract = Unsubscribed
-    , acStake = NotStaked
-    }
-
-data Asset
-  = Asset
-      { aTicker :: Ticker
-      , aBalance :: Amount
-      , aPrice :: Price
-      }
-  | NotStaked
-
-data Trade = Trade
-  { tFrom :: Ticker
-  , tTo :: Ticker
-  , tPrice :: Price
-  }
-
-data Contract
-  = Contract
-      { cBtc :: Asset
-      , cIusd :: Asset
-      , cTrades :: [Trade]
-      }
-  | Unsubscribed
