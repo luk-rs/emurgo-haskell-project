@@ -6,21 +6,24 @@ import Control.Monad.Reader (
   ReaderT (runReaderT),
  )
 import Control.Monad.State (StateT (runStateT))
-import Sifo (
-  Market (manualBookIO, randomizeBookIO),
-  Simulation,
-  emptyAccount,
-  singleMarket,
- )
+import GHC.IO.Handle (hSetEcho)
+import Menus (defaultRenderer, renderLoop)
+import Sifo (Book, Market (manualBookIO, randomizeBookIO), Simulation, emptyAccount, singleMarket)
+import System.IO (stdin)
+
+setup :: IO ()
+setup = do
+  hSetEcho stdin False
 
 main :: IO ()
 main = do
-  runStateT (runReaderT randomizeBook singleMarket) emptyAccount
-  _ <- getChar
+  runStateT renderLoop defaultRenderer
+  -- runStateT (flip runReaderT singleMarket $ runBook randomizeBookIO) emptyAccount
+  -- _ <- getChar
   putStrLn "gudbai"
 
-randomizeBook :: Simulation ()
-randomizeBook = do
-  market <- ask
-  book <- liftIO $ manualBookIO market
-  return ()
+-- runBook :: (Market -> IO Book) -> Simulation ()
+-- runBook run = do
+--   market <- ask
+--   book <- liftIO $ run market
+--   return ()
