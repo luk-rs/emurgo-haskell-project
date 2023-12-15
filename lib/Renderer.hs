@@ -3,21 +3,17 @@ module Renderer where
 import Control.Monad.Reader (runReaderT)
 import Control.Monad.State (MonadIO (liftIO), MonadState (get), StateT (runStateT), modify)
 import Control.Monad.State.Class (gets)
-import Data.Map (Map, fromList, lookup, (!))
-import Data.Maybe (Maybe)
-import Generics (toMap)
+import Data.Map ((!))
 import System.Console.ANSI (clearScreen)
-import Text.Read (readMaybe)
-import Prelude hiding (lookup)
 
 import Account (Account, emptyAccount)
 import Entry (Entry (eSimulation), printEntries, readEntry)
 import Market (singleMarket)
 import Menu (Menu (..), MenuId, menusMap, startMenu)
 import Navigation (Navigation (..))
-import Render (Render (..), defaultRenderer)
+import Scene (Scene (..), defaultRenderer)
 
-type Renderer a = StateT Render IO a
+type Renderer a = StateT Scene IO a
 
 renderSimulator :: IO ()
 renderSimulator = do

@@ -1,18 +1,18 @@
-module Render where
+module Scene where
 
 import Account (Account, emptyAccount)
 import Data.Map (Map)
 import Menu (Menu, MenuId, menusMap, startMenu)
 
-data Render = Render
+data Scene = Scene
   { rMenus :: Map MenuId Menu
   , rMenu :: Menu
   , rAccount :: Account
   }
 
-defaultRenderer :: Render
+defaultRenderer :: Scene
 defaultRenderer =
-  Render
+  Scene
     { rMenus = menusMap
     , rMenu = startMenu
     , rAccount = emptyAccount
