@@ -6,36 +6,30 @@ import Control.Monad.State.Class (gets)
 import Data.Map (Map, fromList, lookup, (!))
 import Data.Maybe (Maybe)
 import Generics (toMap)
+import System.Console.ANSI (clearScreen)
 import Text.Read (readMaybe)
 import Prelude hiding (lookup)
 
 import Account (Account, emptyAccount)
-import Entry (Entry (..), EntryId)
+import Entry (Entry (eSimulation), printEntries, readEntry)
 import Market (singleMarket)
 import Menu (Menu (..), MenuId, menusMap, startMenu)
 import Navigation (Navigation (..))
+import Render (Render (..), defaultRenderer)
 
 type Renderer a = StateT Render IO a
 
-data Render = Renderer
-  { rMenus :: Map MenuId Menu
-  , rMenu :: Menu
-  , rAccount :: Account
-  }
-
-defaultRenderer :: Render
-defaultRenderer =
-  Renderer
-    { rMenus = menusMap
-    , rMenu = startMenu
-    , rAccount = emptyAccount
-    }
+renderSimulator :: IO ()
+renderSimulator = do
+  _ <- runStateT renderLoop defaultRenderer
+  return ()
 
 renderLoop :: Renderer ()
 renderLoop = do
   renderer <- get
   let menu = rMenu renderer
       id = mId menu
+  liftIO clearScreen
   navigation <- renderMenu menu
   case navigation of
     Back -> return ()
@@ -53,10 +47,10 @@ renderMenu menu = do
     putStrLn label
     printEntries entries
     putStr "input > "
-  maybe <- liftIO $ readOption entries
+  maybe <- liftIO $ readEntry entries
   case maybe of
     Nothing -> do
-      liftIO $ putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
+      liftIO $ clearScreen >> putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
       renderMenu menu
     Just entry -> do
       let sim = eSimulation entry
@@ -65,22 +59,3 @@ renderMenu menu = do
         liftIO $ runStateT (runReaderT sim singleMarket) account
       modify $ \renderer -> renderer{rAccount = updatedAccount}
       return navigation
-
-printEntries :: [Entry] -> IO ()
-printEntries [] = return ()
-printEntries (Entry{eId = id, eLabel = label} : xs) = do
-  putStrLn $ "\t" ++ show id ++ " -> " ++ show label
-  printEntries xs
-
-readOption :: [Entry] -> IO (Maybe Entry)
-readOption entries = do
-  maybe <- readInt
-  return $ case maybe of
-    Nothing -> Nothing
-    Just n -> lookup n $ entriesToMap entries
-
-readInt :: IO (Maybe Int)
-readInt = readMaybe <$> getLine
-
-entriesToMap :: [Entry] -> Map EntryId Entry
-entriesToMap entries = fromList $ toMap entries eId

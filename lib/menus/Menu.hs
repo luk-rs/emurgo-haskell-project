@@ -3,9 +3,9 @@ module Menu where
 import Data.Map (Map, fromList)
 import Generics (toMap)
 
-import Account (Simulation)
 import Entry (Entry (..), Label)
 import Navigation (Navigation (..), NavigationId)
+import Simulation (Simulation)
 
 type MenuId = NavigationId
 
@@ -36,9 +36,10 @@ manualSimMenu :: Menu
 manualSimMenu =
   Menu
     { mId = 2
-    , mLabel = ""
+    , mLabel = "Random Simulation"
     , mEntries =
-        [ newEntry 0 "Back to simulation selection menu" $ return Back
+        [ newEntry 1 "Choose the number of weeks and price range and enjoy the beauty of mathematics" $ return Back
+        , newEntry 0 "Back to simulation selection menu" $ return Back
         ]
     }
 

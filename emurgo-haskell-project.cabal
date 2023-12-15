@@ -19,23 +19,29 @@ maintainer:         santos8@gmail.com
 extra-source-files: CHANGELOG.md
 
 library
-  exposed-modules:
-    Account
-    Renderer
+  exposed-modules:  Renderer
 
   -- Modules included in this library but not exported.
   other-modules:
+    Account
+    Asset
     Book
+    Contract
     Entry
     Generics
     Market
     Menu
     Navigation
+    Render
+    Simulation
+    Ticker
+    Trade
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
   build-depends:
-    , base        ^>=4.17.2.0
+    , ansi-terminal
+    , base           ^>=4.17.2.0
     , containers
     , mtl
     , random
@@ -54,6 +60,7 @@ executable emurgo-haskell-project
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
   build-depends:
+    , ansi-terminal
     , base                    ^>=4.17.2.0
     , emurgo-haskell-project
     , mtl
