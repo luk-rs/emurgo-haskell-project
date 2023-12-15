@@ -4,8 +4,7 @@ import Control.Monad.State (StateT (runStateT))
 import GHC.IO.Handle (hSetBuffering, hSetEcho)
 import System.IO (BufferMode (LineBuffering, NoBuffering), stdin, stdout)
 
-import Menus (renderLoop)
-import Renderer (defaultRenderer)
+import Renderer (defaultRenderer, renderLoop)
 
 main :: IO ()
 main = do

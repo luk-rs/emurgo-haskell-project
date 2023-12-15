@@ -1,8 +1,9 @@
 module Entry where
 
 import Data.Map (Map, fromList)
+
+import Account (Simulation)
 import Navigation (Navigation)
-import Simulation (Simulation)
 
 type EntryId = Int
 type Label = String

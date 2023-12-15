@@ -20,20 +20,17 @@ extra-source-files: CHANGELOG.md
 
 library
   exposed-modules:
-    Menus
+    Account
     Renderer
-    Sifo
 
   -- Modules included in this library but not exported.
   other-modules:
-    Account
     Book
     Entry
     Generics
     Market
     Menu
     Navigation
-    Simulation
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:

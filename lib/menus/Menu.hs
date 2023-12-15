@@ -1,10 +1,11 @@
 module Menu where
 
 import Data.Map (Map, fromList)
-import Entry (Entry (..), Label)
 import Generics (toMap)
+
+import Account (Simulation)
+import Entry (Entry (..), Label)
 import Navigation (Navigation (..), NavigationId)
-import Simulation (Simulation)
 
 type MenuId = NavigationId
 

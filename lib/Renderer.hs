@@ -1,20 +1,86 @@
 module Renderer where
 
-import Account (Account)
-import Data.Map (Map)
-import Menu (Menu, MenuId, menusMap, startMenu)
-import Sifo (emptyAccount)
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.State (MonadIO (liftIO), MonadState (get), StateT (runStateT), modify)
+import Control.Monad.State.Class (gets)
+import Data.Map (Map, fromList, lookup, (!))
+import Data.Maybe (Maybe)
+import Generics (toMap)
+import Text.Read (readMaybe)
+import Prelude hiding (lookup)
 
-data Renderer = Renderer
+import Account (Account, emptyAccount)
+import Entry (Entry (..), EntryId)
+import Market (singleMarket)
+import Menu (Menu (..), MenuId, menusMap, startMenu)
+import Navigation (Navigation (..))
+
+type Renderer a = StateT Render IO a
+
+data Render = Renderer
   { rMenus :: Map MenuId Menu
   , rMenu :: Menu
   , rAccount :: Account
   }
 
-defaultRenderer :: Renderer
+defaultRenderer :: Render
 defaultRenderer =
   Renderer
     { rMenus = menusMap
     , rMenu = startMenu
     , rAccount = emptyAccount
     }
+
+renderLoop :: Renderer ()
+renderLoop = do
+  renderer <- get
+  let menu = rMenu renderer
+      id = mId menu
+  navigation <- renderMenu menu
+  case navigation of
+    Back -> return ()
+    Forward target -> do
+      modify $ \renderer -> renderer{rMenu = menusMap ! target}
+      renderLoop
+      modify $ \renderer -> renderer{rMenu = menu}
+      renderLoop
+
+renderMenu :: Menu -> Renderer Navigation
+renderMenu menu = do
+  let label = mLabel menu
+      entries = mEntries menu
+  liftIO $ do
+    putStrLn label
+    printEntries entries
+    putStr "input > "
+  maybe <- liftIO $ readOption entries
+  case maybe of
+    Nothing -> do
+      liftIO $ putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
+      renderMenu menu
+    Just entry -> do
+      let sim = eSimulation entry
+      (navigation, updatedAccount) <- do
+        account <- gets rAccount
+        liftIO $ runStateT (runReaderT sim singleMarket) account
+      modify $ \renderer -> renderer{rAccount = updatedAccount}
+      return navigation
+
+printEntries :: [Entry] -> IO ()
+printEntries [] = return ()
+printEntries (Entry{eId = id, eLabel = label} : xs) = do
+  putStrLn $ "\t" ++ show id ++ " -> " ++ show label
+  printEntries xs
+
+readOption :: [Entry] -> IO (Maybe Entry)
+readOption entries = do
+  maybe <- readInt
+  return $ case maybe of
+    Nothing -> Nothing
+    Just n -> lookup n $ entriesToMap entries
+
+readInt :: IO (Maybe Int)
+readInt = readMaybe <$> getLine
+
+entriesToMap :: [Entry] -> Map EntryId Entry
+entriesToMap entries = fromList $ toMap entries eId
