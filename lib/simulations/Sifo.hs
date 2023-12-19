@@ -1,19 +1,20 @@
 module Sifo where
 
 import Control.Concurrent (threadDelay)
-import Control.Monad.RWS (MonadState (get), asks, forM, forM_, gets, modify, unless, void)
+import Control.Monad.RWS (MonadState (get), asks, foldM_, forM, forM_, gets, modify, unless, void, when)
 import Control.Monad.Reader (MonadIO (liftIO))
-import GHC.IO.FD (stdin)
 import GHC.IO.Handle (hWaitForInput)
 import Generics (ErrorMessage, handlingError, pressAnyKey)
 import System.Console.ANSI (clearScreen)
+import System.IO (stdin)
 import System.Random (randomRIO)
 import Text.Read (readMaybe)
 
 import Account (Account (..))
 import Asset (Amount, Asset (..))
-import Book (Book (..), Price)
-import Contract (Contract (..))
+import Book (Book (..), Price, initialBook)
+import Contract (Beta, Contract (..), Trigger)
+import Control.Monad.Cont (cont)
 import Market (Market (randomizeBookIO))
 import Navigation (Navigation (Back, Forward))
 import Simulation (Simulation)
@@ -22,72 +23,112 @@ import Trade (Trade (..))
 
 autoSifo :: Simulation Navigation
 autoSifo = do
-  ticker <- liftIO (chooseSifoTicker "")
-  amount <- liftIO (selectAmountToStake ticker "")
-  range@(low, high) <- liftIO (selectRangeForTicker ticker)
-  weeks <- liftIO (selectWeeks "")
-  runSimulation ticker amount range weeks
+  -- ticker <- liftIO (chooseSifoTicker "")
+  let ticker = IUSD
+  -- amount <- liftIO (selectAmountToStake ticker "")
+  let amount = 1000
+  -- range@(low, high) <- liftIO (selectRangeForTicker ticker)
+  iterations <- liftIO (selectIterations "")
+  runSimulation ticker amount iterations
   return $ Forward 3
 
 randPrice :: (Price, Price) -> IO Price
 randPrice = randomRIO
 
-runSimulation :: Ticker -> Amount -> (Price, Price) -> Int -> Simulation ()
-runSimulation ticker amount range@(high, low) weeks = do
-  liftIO
-    $ clearScreen
-    >> putStrLn ("GREAT, SIMULATING $" <> show ticker <> " FOR " <> show weeks <> " weeks between " <> show low <> "$-" <> show high <> "$")
-  (subBook : rebBooks) <- generateBooks ticker range weeks
-  subscribeContract ticker amount subBook
-  forM_ rebBooks (rebalanceFromBook ticker)
+runSimulation :: Ticker -> Amount -> Int -> Simulation ()
+runSimulation ticker amount iterations = do
+  subscriptionBook <-
+    liftIO
+      $ clearScreen
+      >> putStrLn ("SIMULATING " <> show amount <> "$ of $" <> show ticker <> " FOR " <> show iterations <> " iterations")
+      >> initialBook
+  subscribeContract 80 5 BTC amount subscriptionBook
+  foldM_ (\prev iteration -> runIteration prev) subscriptionBook ([0 .. iterations] :: [Int])
 
-subscribeContract :: Ticker -> Amount -> Book -> Simulation ()
-subscribeContract ticker amount book = do
-  let sixty = amount * 0.6
-      fourty = amount * 0.4 * bPrice book
-      subscriptionTrade = Trade{tFrom = ticker, tTo = IUSD, tPrice = bPrice book, tAmount = amount}
+runIteration :: Book -> Simulation Book
+runIteration prevBook = do
+  _ <- liftIO $ hWaitForInput stdin 500000
+  market <- asks randomizeBookIO
+  newBook <- liftIO $ market prevBook
+  liftIO $ do
+    putStrLn "New book"
+    putStrLn $ "(BTC, IUSD) => (" <> show (bBtc newBook) <> ", " <> show (bAda newBook) <> ")"
+    putStrLn ""
+  contract <- gets acContract
+  let c0 = cIusd contract
+      q0 = cBtc contract
+      p1 = bBtc newBook
+      quocient = c0 / (q0 * p1)
+      beta = cBeta contract
+      trigger = cTrigger contract
+      beta' = fromIntegral beta
+      quocient' = ((100 - beta') / beta') * (1 / (1 + (trigger / 100)))
+      shouldSellBtc = quocient < quocient'
+  when shouldSellBtc $ sellBtc quocient' newBook
+  let quocient'' = ((100 - beta') / beta') * (1 / (1 - (trigger / 100)))
+      shouldBuyBtc = quocient > quocient''
+  when shouldBuyBtc $ buyBtc quocient'' newBook
+  return newBook
+
+buyBtc :: Double -> Book -> Simulation ()
+buyBtc quocient'' book = do
+  contract <- gets acContract
+  let c0 = cIusd contract
+      q0 = cBtc contract
+      p1 = bBtc book
+      beta = cBeta contract
+      trigger = cTrigger contract
+      q2 = c0 - quocient'' * q0 * p1
+      q1' = (100 - fromIntegral beta) / fromIntegral beta
+      q3 = (1 + q1') * p1
+      btcBuy = q2 / q3
+      iusd' = c0 - btcBuy * p1
+      cBtc' = q0 + btcBuy
+      meanPrice = (q0 * cMeanBtcPrice contract + btcBuy * p1) / cBtc'
+  modify $ \account -> account{acContract = contract{cBtc = cBtc', cIusd = iusd', cMeanBtcPrice = meanPrice}}
+  liftIO $ do
+    putStrLn "Buying BTC"
+    putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc' <> ", " <> show iusd' <> ")"
+    putStrLn $ "Mean Price " <> show meanPrice
+    putStrLn ""
+  return ()
+
+sellBtc :: Double -> Book -> Simulation ()
+sellBtc quocient' book = do
+  contract <- gets acContract
+  let c0 = cIusd contract
+      q0 = cBtc contract
+      p1 = bBtc book
+      beta = cBeta contract
+      trigger = cTrigger contract
+      q2 = quocient' * q0 * p1 - c0
+      q1' = (100 - fromIntegral beta) / fromIntegral beta
+      q3 = (1 + q1') * p1
+      btcSell = q2 / q3
+      iusd' = c0 + btcSell * p1
+      cBtc' = q0 - btcSell
+  modify $ \account -> account{acContract = contract{cBtc = cBtc', cIusd = iusd'}}
+  liftIO $ do
+    putStrLn "Selling BTC"
+    putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc' <> ", " <> show iusd' <> ")"
+    putStrLn $ "Mean Price " <> show (cMeanBtcPrice contract)
+    putStrLn ""
+  return ()
+
+subscribeContract :: Beta -> Trigger -> Ticker -> Amount -> Book -> Simulation ()
+subscribeContract beta trigger ticker amount book = do
+  let crypto = amount * fromIntegral beta / 100 / bBtc book
+      stable = amount * (100 - fromIntegral beta) / 100
   modify $ \account ->
     account
-      { acStake = Asset{aTicker = ticker, aPrice = bPrice book, aBalance = amount}
-      , acContract = Contract{cBtc = sixty, cIusd = fourty, cTrades = [subscriptionTrade]}
+      { acStake = Asset{aTicker = ticker, aPrice = bBtc book, aBalance = amount}
+      , acContract = Contract{cBtc = crypto, cIusd = stable, cBeta = beta, cTrigger = trigger / 100, cMeanBtcPrice = bBtc book}
       }
-
-generateBooks :: Ticker -> (Price, Price) -> Int -> Simulation [Book]
-generateBooks ticker range weeks = do
-  marketRandomizer <- asks randomizeBookIO
-  liftIO
-    $ forM [1 .. weeks + 1]
-    $ \week -> do
-      threadDelay 25000
-      book <- marketRandomizer ticker range
-      liftIO . putStrLn $ "Randomized week " <> show week <> " for ticker $" <> show ticker <> " having price " <> show (bPrice book) <> "$"
-      return book
-
-rebalanceFromBook :: Ticker -> Book -> Simulation ()
-rebalanceFromBook ticker book = do
-  contract <- gets acContract
-  let tickerAmount = cBtc contract
-      stableAsTickerAmount = cIusd contract / bPrice book
-      totalTickerAmount = tickerAmount + stableAsTickerAmount
-      sixty = totalTickerAmount * 0.6
-      fourty = totalTickerAmount * 0.4 * bPrice book
-      (from, to, amount) =
-        if sixty > tickerAmount
-          then do
-            -- I'm buying btc from iUsd
-            let tickerAmountToBuy = sixty - tickerAmount
-                iUsdAmountToSell = tickerAmountToBuy * bPrice book
-            (IUSD, ticker, iUsdAmountToSell)
-          else do
-            -- I'm buying iUsd from btc
-            let tickerAmountToSell = tickerAmount - sixty
-            (ticker, IUSD, tickerAmountToSell)
-      rebalanceTrade = Trade{tTo = to, tFrom = from, tPrice = bPrice book, tAmount = amount}
-  modify $ \account -> do
-    let contract = acContract account
-        prevTrades = cTrades contract
-    account{acContract = Contract{cBtc = sixty, cIusd = fourty, cTrades = rebalanceTrade : prevTrades}}
-  liftIO . putStrLn $ "Selling from $" <> show (tFrom rebalanceTrade) <> " to $" <> show (tTo rebalanceTrade) <> " " <> show (tAmount rebalanceTrade) <> " tokens"
+  liftIO $ do
+    putStrLn "Subscribed"
+    putStrLn $ "(BTC, IUSD) => (" <> show crypto <> ", " <> show stable <> ")"
+    putStrLn $ "Entry Price " <> show (bBtc book)
+    putStrLn ""
 
 chooseSifoTicker :: ErrorMessage -> IO Ticker
 chooseSifoTicker error = do
@@ -122,11 +163,11 @@ selectCustomRange range ticker error = do
     Nothing -> selectCustomRange range ticker "PLEASE CHOOSE A VALID VALUE FOR THE LOWER RANGE, IT MUST BE IN FORMAT '6.9' WITH THE VALUE YOU DESIRE"
     Just lower -> return lower
 
-selectWeeks :: ErrorMessage -> IO Int
-selectWeeks error = do
+selectIterations :: ErrorMessage -> IO Int
+selectIterations error = do
   handlingError error
-  putStrLn "How many weeks you wish the simulation to run for:"
+  putStrLn "How many iterations you wish the simulation to run for:"
   maybe <- readMaybe <$> getLine
   case maybe of
-    Nothing -> selectWeeks "THAT IS NOT A VALID NUMBER, PLEASE INSERT DIGITS REPRESENTING THE AMOUNT OF WEEKS YOU WISH TO SIMULATE"
+    Nothing -> selectIterations "THAT IS NOT A VALID NUMBER, PLEASE INSERT DIGITS REPRESENTING THE AMOUNT OF ITERATIONS YOU WISH TO SIMULATE"
     Just weeks -> return weeks

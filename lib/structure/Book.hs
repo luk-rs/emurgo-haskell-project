@@ -1,23 +1,51 @@
 module Book where
 
-import System.Random (randomRIO)
+import System.Random (randomIO, randomRIO)
 import Ticker (Ticker (ADA, BTC), priceFor)
 
 type Price = Double
 
 data Book = Book
-  { bTicker :: Ticker
-  , bPrice :: Price
+  { bBtc :: Price
+  , bAda :: Price
   }
 
-bookFromRandom :: Ticker -> (Price, Price) -> IO Book
-bookFromRandom ticker range = do
-  randomBtc <- randomRIO range
+randomizePrice :: Price -> IO Price
+randomizePrice prev = do
+  toss <- randomRIO (0, 100)
+  let up = (toss :: Int) < 55
+  percentage <-
+    if up
+      then randomRIO (0, 7)
+      else
+        if toss > 99
+          then randomRIO (7, 20)
+          else randomRIO (0, 7)
+  let change = prev * percentage / 100
+  putStrLn $ "TOSS: " <> show toss
+  return
+    $ if up
+      then prev + change
+      else prev - change
+
+bookFromRandom :: Book -> IO Book
+bookFromRandom book = do
+  let prevBtc = bBtc book
+  randomBtc <- randomizePrice prevBtc
+  let prevAda = bAda book
+  -- randomAda <- randomizePrice prevAda
   return
     Book
-      { bTicker = ticker
-      , bPrice = randomBtc
+      { bBtc = randomBtc
+      , bAda = prevAda -- todo fix me
       }
 
-bookFromInput :: IO Book
-bookFromInput = undefined
+initialBook :: IO Book
+initialBook = do
+  randomBtc <- randomRIO (25432.12, 28891.33)
+  randomAda <- randomRIO (0.22432, 0.26763)
+  return
+    $ Book
+      { bBtc = randomBtc
+      , bAda = randomAda
+      }

@@ -4,7 +4,8 @@ import Data.Map (Map, fromList)
 import Generics (toMap)
 
 import Entry (Entry (..), Label)
-import Inspection (inspectTrades)
+
+-- import Inspection (inspectTrades)
 import Navigation (Navigation (..), NavigationId)
 import Sifo (autoSifo)
 import Simulation (Simulation)
@@ -28,8 +29,8 @@ startMenu =
     { mId = 1
     , mLabel = "Choose a simulation"
     , mEntries =
-        [ newEntry 1 "Simulate manually inserting custom values" $ return Back
-        , newEntry 2 "Simulate randomly on selected range for a given time" $ return (Forward 2)
+        [ -- newEntry 1 "Simulate manually inserting custom values" $ return Back,
+          newEntry 1 "Simulate randomly on selected range for a given time" $ return (Forward 2)
         , newEntry 0 "Exit program" $ return Exit
         ]
     }
@@ -40,7 +41,7 @@ randomSimMenu =
     { mId = 2
     , mLabel = "Random Simulation"
     , mEntries =
-        [ newEntry 1 "Choose the number of weeks and price range and enjoy the beauty of mathematics" autoSifo
+        [ newEntry 1 "Choose the number of iterations enjoy the beauty of mathematics" autoSifo
         , newEntry 0 "Back to simulation selection menu" $ return Back
         ]
     }
@@ -51,7 +52,7 @@ simInspection =
     { mId = 3
     , mLabel = "Random Simulation"
     , mEntries =
-        [ newEntry 1 "Inspect Trades" inspectTrades
+        [ newEntry 1 "Inspect Trades" $ return (Forward 1) -- inspectTrades
         , newEntry 2 "Inspect Transaction details" $ return (Forward 1)
         , newEntry 3 "Inspect Rebalance outcome" $ return (Forward 1)
         , newEntry 0 "Back to Main menu" $ return (Forward 1)
