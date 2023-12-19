@@ -1,11 +1,12 @@
 module Market where
 
-import Book (Book (..), bookFromInput, bookFromRandom)
+import Book (Book (..), Price, bookFromInput, bookFromRandom)
 import System.Random (randomRIO)
 import Text.Read (readMaybe)
+import Ticker (Ticker)
 
 data Market = Market
-  { randomizeBookIO :: IO Book
+  { randomizeBookIO :: Ticker -> (Price, Price) -> IO Book
   , manualBookIO :: IO Book
   }
 

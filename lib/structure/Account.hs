@@ -6,7 +6,7 @@ import Contract (Contract (..))
 import Market (Market)
 import Ticker (Ticker)
 
-type AccountId = Double
+type AccountId = Int
 data Account = Account
   { acId :: AccountId
   , acContract :: Contract
@@ -16,7 +16,7 @@ data Account = Account
 emptyAccount :: Account
 emptyAccount =
   Account
-    { acId = 231.231
+    { acId = 69
     , acContract = Unsubscribed
     , acStake = NotStaked
     }

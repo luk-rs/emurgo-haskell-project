@@ -6,26 +6,18 @@ import Ticker (Ticker (ADA, BTC), priceFor)
 type Price = Double
 
 data Book = Book
-  { bBtc :: Price
-  , bAda :: Price
+  { bTicker :: Ticker
+  , bPrice :: Price
   }
 
-bookFromRandom :: IO Book
-bookFromRandom = do
-  randomBtc <- randomRIO (16512.23, 43981.76)
-  randomAda <- randomRIO (0.2234415, 0.5932197)
+bookFromRandom :: Ticker -> (Price, Price) -> IO Book
+bookFromRandom ticker range = do
+  randomBtc <- randomRIO range
   return
     Book
-      { bBtc = randomBtc
-      , bAda = randomAda
+      { bTicker = ticker
+      , bPrice = randomBtc
       }
 
 bookFromInput :: IO Book
-bookFromInput = do
-  btcPrice <- priceFor BTC
-  adaPrice <- priceFor ADA
-  return
-    Book
-      { bBtc = btcPrice
-      , bAda = adaPrice
-      }
+bookFromInput = undefined

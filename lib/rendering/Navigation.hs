@@ -7,3 +7,5 @@ data Navigation
       { fOption :: NavigationId
       }
   | Back
+  | Stay
+  | Exit

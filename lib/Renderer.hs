@@ -5,6 +5,7 @@ import Control.Monad.State (MonadIO (liftIO), MonadState (get), StateT (runState
 import Control.Monad.State.Class (gets)
 import Data.Map ((!))
 import System.Console.ANSI (clearScreen)
+import System.Exit (exitSuccess)
 
 import Account (Account, emptyAccount)
 import Entry (Entry (eSimulation), printEntries, readEntry)
@@ -28,6 +29,8 @@ renderLoop = do
   liftIO clearScreen
   navigation <- renderMenu menu
   case navigation of
+    Exit -> liftIO exitSuccess
+    Stay -> renderLoop
     Back -> return ()
     Forward target -> do
       modify $ \renderer -> renderer{rMenu = menusMap ! target}
