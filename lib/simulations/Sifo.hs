@@ -6,7 +6,7 @@ import Control.Monad.Reader (MonadIO (liftIO))
 import GHC.IO.Handle (hWaitForInput)
 import Generics (ErrorMessage, handlingError, pressAnyKey)
 import System.Console.ANSI (clearScreen)
-import System.IO (stdin)
+import System.IO (stdin, stdout)
 import System.Random (randomRIO)
 import Text.Read (readMaybe)
 
@@ -42,12 +42,12 @@ runSimulation ticker amount iterations = do
       $ clearScreen
       >> putStrLn ("SIMULATING " <> show amount <> "$ of $" <> show ticker <> " FOR " <> show iterations <> " iterations")
       >> initialBook
-  subscribeContract 80 5 BTC amount subscriptionBook
+  subscribeContract 80 15 BTC amount subscriptionBook
   foldM_ (\prev iteration -> runIteration prev) subscriptionBook ([0 .. iterations] :: [Int])
 
 runIteration :: Book -> Simulation Book
 runIteration prevBook = do
-  _ <- liftIO $ hWaitForInput stdin 500000
+  liftIO $ hWaitForInput stdin 1500
   market <- asks randomizeBookIO
   newBook <- liftIO $ market prevBook
   liftIO $ do
@@ -89,6 +89,16 @@ buyBtc quocient'' book = do
   liftIO $ do
     putStrLn "Buying BTC"
     putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc' <> ", " <> show iusd' <> ")"
+    let iUsdBtc = iusd' / bBtc book
+        totalBtc = cBtc' + iUsdBtc
+    putStrLn $ "Total BTC " <> show totalBtc
+    let btcIusd = cBtc' * bBtc book
+        totalIusd = iusd' + btcIusd
+    putStrLn $ "Total USD " <> show totalIusd
+    let pctgIusd = iusd' / btcIusd * 100
+        pctgBtc = iUsdBtc / cBtc' * 100
+    putStrLn $ "% " <> show pctgIusd <> " | " <> show pctgBtc
+    putStrLn $ "$BTC " <> show (bBtc book)
     putStrLn $ "Mean Price " <> show meanPrice
     putStrLn ""
   return ()
@@ -111,6 +121,16 @@ sellBtc quocient' book = do
   liftIO $ do
     putStrLn "Selling BTC"
     putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc' <> ", " <> show iusd' <> ")"
+    let iUsdBtc = iusd' / bBtc book
+        totalBtc = cBtc' + iUsdBtc
+    putStrLn $ "Total BTC " <> show totalBtc
+    let btcIusd = cBtc' * bBtc book
+        totalIusd = iusd' + btcIusd
+    putStrLn $ "Total USD " <> show totalIusd
+    let pctgIusd = iusd' / btcIusd * 100
+        pctgBtc = iUsdBtc / cBtc' * 100
+    putStrLn $ "% " <> show pctgIusd <> " | " <> show pctgBtc
+    putStrLn $ "$BTC " <> show (bBtc book)
     putStrLn $ "Mean Price " <> show (cMeanBtcPrice contract)
     putStrLn ""
   return ()
