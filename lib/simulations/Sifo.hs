@@ -43,145 +43,118 @@ runSimulation ticker amount iterations = do
       >> putStrLn ("SIMULATING " <> show amount <> "$ of $" <> show ticker <> " FOR " <> show iterations <> " iterations")
       >> initialBook
   subscribeContract 80 15 BTC amount subscriptionBook
-  foldM_ (\prev iteration -> runIteration prev) subscriptionBook ([0 .. iterations] :: [Int])
+  foldM_ (\prev iteration -> runIteration prev) subscriptionBook ([1 .. iterations] :: [Int])
+
+subscribeContract :: Beta -> Trigger -> Ticker -> Amount -> Book -> Simulation ()
+subscribeContract beta trigger ticker amount (Book p1 _) = do
+  let crypto = amount * beta / 100 / p1
+      stable = amount * (100 - beta) / 100
+  modify $ \account ->
+    account
+      { acStake = Asset{aTicker = ticker, aPrice = p1, aBalance = amount}
+      , acContract = Contract{cBtc = crypto, cIusd = stable, cBeta = beta, cTrigger = trigger / 100, cMeanBtcPrice = p1}
+      }
+  liftIO $ printSubscription crypto stable p1
 
 runIteration :: Book -> Simulation Book
 runIteration prevBook = do
-  liftIO $ hWaitForInput stdin 1500
+  liftIO $ hWaitForInput stdin 500
   market <- asks randomizeBookIO
-  newBook <- liftIO $ market prevBook
-  liftIO $ do
-    putStrLn "New book"
-    putStrLn $ "(BTC, IUSD) => (" <> show (bBtc newBook) <> ", " <> show (bAda newBook) <> ")"
-    putStrLn ""
-  contract <- gets acContract
-  let c0 = cIusd contract
-      q0 = cBtc contract
-      p1 = bBtc newBook
-      quocient = c0 / (q0 * p1)
-      beta = cBeta contract
-      trigger = cTrigger contract
-      beta' = fromIntegral beta
-      quocient' = ((100 - beta') / beta') * (1 / (1 + (trigger / 100)))
-      shouldSellBtc = quocient < quocient'
-  when shouldSellBtc $ sellBtc quocient' newBook
-  let quocient'' = ((100 - beta') / beta') * (1 / (1 - (trigger / 100)))
-      shouldBuyBtc = quocient > quocient''
-  when shouldBuyBtc $ buyBtc quocient'' newBook
+  newBook@(Book p1 _) <- liftIO $ market prevBook
+  contract@(Contract q0 c0 beta trigger _) <- gets acContract
+  liftIO $ printBook prevBook newBook trigger
+  let proportion = c0 / (q0 * p1)
+      q0p1 = q0 * p1
+      betaC0 = beta * c0
+      stable = 100 - beta
+      price = 100 * p1
+      sellRatio = (stable * q0p1 - betaC0) / price
+      shouldSellBtc = proportion < sellRatio
+  liftIO . putStrLn $ "SELL >> (proprtion) " <> show proportion <> " < " <> show sellRatio <> "(ratio) = " <> show shouldSellBtc
+  when shouldSellBtc $ sellBtc contract sellRatio newBook
+  let buyRatio = (betaC0 - stable * q0p1) / price
+      shouldBuyBtc = proportion > buyRatio
+  liftIO . putStrLn $ "BUY >> (proprtion) " <> show proportion <> " > " <> show buyRatio <> "(ratio) = " <> show shouldBuyBtc
+  when shouldBuyBtc $ buyBtc contract buyRatio newBook
   return newBook
 
-buyBtc :: Double -> Book -> Simulation ()
-buyBtc quocient'' book = do
+buyBtc :: Contract -> Double -> Book -> Simulation ()
+buyBtc (Contract q0 c0 beta trigger mean) buyRatio book@(Book p1 _) = do
   contract <- gets acContract
-  let c0 = cIusd contract
-      q0 = cBtc contract
-      p1 = bBtc book
-      beta = cBeta contract
-      trigger = cTrigger contract
-      q2 = c0 - quocient'' * q0 * p1
-      q1' = (100 - fromIntegral beta) / fromIntegral beta
+  let q2 = c0 - buyRatio * q0 * p1
+      q1' = (100 - beta) / beta
       q3 = (1 + q1') * p1
       btcBuy = q2 / q3
       iusd' = c0 - btcBuy * p1
       cBtc' = q0 + btcBuy
-      meanPrice = (q0 * cMeanBtcPrice contract + btcBuy * p1) / cBtc'
+      meanPrice = (q0 * mean + btcBuy * p1) / cBtc'
   modify $ \account -> account{acContract = contract{cBtc = cBtc', cIusd = iusd', cMeanBtcPrice = meanPrice}}
-  liftIO $ do
-    putStrLn "Buying BTC"
-    putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc' <> ", " <> show iusd' <> ")"
-    let iUsdBtc = iusd' / bBtc book
-        totalBtc = cBtc' + iUsdBtc
-    putStrLn $ "Total BTC " <> show totalBtc
-    let btcIusd = cBtc' * bBtc book
-        totalIusd = iusd' + btcIusd
-    putStrLn $ "Total USD " <> show totalIusd
-    let pctgIusd = iusd' / btcIusd * 100
-        pctgBtc = iUsdBtc / cBtc' * 100
-    putStrLn $ "% " <> show pctgIusd <> " | " <> show pctgBtc
-    putStrLn $ "$BTC " <> show (bBtc book)
-    putStrLn $ "Mean Price " <> show meanPrice
-    putStrLn ""
-  return ()
+  printTrade "Buying BTC" contract book
 
-sellBtc :: Double -> Book -> Simulation ()
-sellBtc quocient' book = do
+sellBtc :: Contract -> Double -> Book -> Simulation ()
+sellBtc (Contract q0 c0 beta trigger mean) sellRatio book@(Book p1 _) = do
   contract <- gets acContract
-  let c0 = cIusd contract
-      q0 = cBtc contract
-      p1 = bBtc book
-      beta = cBeta contract
-      trigger = cTrigger contract
-      q2 = quocient' * q0 * p1 - c0
-      q1' = (100 - fromIntegral beta) / fromIntegral beta
+  let q2 = sellRatio * q0 * p1 - c0
+      q1' = (100 - beta) / beta
       q3 = (1 + q1') * p1
       btcSell = q2 / q3
       iusd' = c0 + btcSell * p1
       cBtc' = q0 - btcSell
   modify $ \account -> account{acContract = contract{cBtc = cBtc', cIusd = iusd'}}
+  printTrade "Selling BTC" contract book
+
+printBook :: Book -> Book -> Double -> IO ()
+printBook (Book p0 _) (Book p1 _) trigger = do
+  putStrLn "New book"
+  putStrLn $ "BTC ( cur <- prev )\n(" <> show p1 <> " <- " <> show p0 <> ")"
+  let fluctuation = (p1 - p0) / (p1 + p0) * 100
+  putStrLn $ "Fluctuation " <> show fluctuation
+  putStrLn $ "Trigger " <> show (trigger * 100)
+  putStrLn ""
+
+printTrade :: String -> Contract -> Book -> Simulation ()
+printTrade message (Contract q0 c0 _ _ mean) (Book p1 _) = do
+  (Contract cBtc iUsd _ _ _) <- gets acContract
   liftIO $ do
-    putStrLn "Selling BTC"
-    putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc' <> ", " <> show iusd' <> ")"
-    let iUsdBtc = iusd' / bBtc book
-        totalBtc = cBtc' + iUsdBtc
+    putStrLn message
+    putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show cBtc <> ", " <> show iUsd <> ")"
+    let iUsdBtc = iUsd / p1
+        totalBtc = cBtc + iUsdBtc
     putStrLn $ "Total BTC " <> show totalBtc
-    let btcIusd = cBtc' * bBtc book
-        totalIusd = iusd' + btcIusd
+    let btcIusd = cBtc * p1
+        totalIusd = iUsd + btcIusd
     putStrLn $ "Total USD " <> show totalIusd
-    let pctgIusd = iusd' / btcIusd * 100
-        pctgBtc = iUsdBtc / cBtc' * 100
+    let pctgIusd = iUsd / btcIusd * 100
+        pctgBtc = iUsdBtc / cBtc * 100
     putStrLn $ "% " <> show pctgIusd <> " | " <> show pctgBtc
-    putStrLn $ "$BTC " <> show (bBtc book)
-    putStrLn $ "Mean Price " <> show (cMeanBtcPrice contract)
-    putStrLn ""
-  return ()
-
-subscribeContract :: Beta -> Trigger -> Ticker -> Amount -> Book -> Simulation ()
-subscribeContract beta trigger ticker amount book = do
-  let crypto = amount * fromIntegral beta / 100 / bBtc book
-      stable = amount * (100 - fromIntegral beta) / 100
-  modify $ \account ->
-    account
-      { acStake = Asset{aTicker = ticker, aPrice = bBtc book, aBalance = amount}
-      , acContract = Contract{cBtc = crypto, cIusd = stable, cBeta = beta, cTrigger = trigger / 100, cMeanBtcPrice = bBtc book}
-      }
-  liftIO $ do
-    putStrLn "Subscribed"
-    putStrLn $ "(BTC, IUSD) => (" <> show crypto <> ", " <> show stable <> ")"
-    putStrLn $ "Entry Price " <> show (bBtc book)
+    putStrLn $ "$BTC " <> show p1
+    putStrLn $ "Mean Price " <> show mean
     putStrLn ""
 
-chooseSifoTicker :: ErrorMessage -> IO Ticker
-chooseSifoTicker error = do
-  handlingError error
-  putStrLn "Please choose a $Ticker to simulate rebalancing strategy:"
-  maybe <- chooseTicker
-  case maybe of
-    Nothing -> chooseSifoTicker "INVALID OPTION, PLEASE CHOOSE A VALID NUMBER"
-    Just ticker -> return ticker
+printSubscription :: Double -> Double -> Price -> IO ()
+printSubscription crypto stable price = do
+  putStrLn "Subscribed"
+  putStrLn $ "(BTC, IUSD) => (" <> show crypto <> ", " <> show stable <> ")"
+  putStrLn $ "Entry Price " <> show price
+  putStrLn ""
 
-selectAmountToStake :: Ticker -> ErrorMessage -> IO Double
-selectAmountToStake ticker error = do
-  handlingError error
-  putStrLn "Insert the amount you're wish to stake:"
-  maybe <- readMaybe <$> getLine
-  case maybe of
-    Nothing -> selectAmountToStake ticker "THAT IS NOT A VALID AMOUNT, IT MUST BE IN FORMAT '6.9' WITH THE VALUE YOU DESIRE"
-    Just amount -> return amount
+-- chooseSifoTicker :: ErrorMessage -> IO Ticker
+-- chooseSifoTicker error = do
+--   handlingError error
+--   putStrLn "Please choose a $Ticker to simulate rebalancing strategy:"
+--   maybe <- chooseTicker
+--   case maybe of
+--     Nothing -> chooseSifoTicker "INVALID OPTION, PLEASE CHOOSE A VALID NUMBER"
+--     Just ticker -> return ticker
 
-selectRangeForTicker :: Ticker -> IO (Price, Price)
-selectRangeForTicker ticker = do
-  low <- selectCustomRange "lower" ticker ""
-  high <- selectCustomRange "higher" ticker ""
-  return (low, high)
-
-selectCustomRange :: String -> Ticker -> ErrorMessage -> IO Price
-selectCustomRange range ticker error = do
-  handlingError error
-  putStrLn $ "Please choose the " <> range <> " range price for $" <> show ticker <> " :"
-  maybe <- readMaybe <$> getLine
-  case maybe of
-    Nothing -> selectCustomRange range ticker "PLEASE CHOOSE A VALID VALUE FOR THE LOWER RANGE, IT MUST BE IN FORMAT '6.9' WITH THE VALUE YOU DESIRE"
-    Just lower -> return lower
+-- selectAmountToStake :: Ticker -> ErrorMessage -> IO Double
+-- selectAmountToStake ticker error = do
+--   handlingError error
+--   putStrLn "Insert the amount you're wish to stake:"
+--   maybe <- readMaybe <$> getLine
+--   case maybe of
+--     Nothing -> selectAmountToStake ticker "THAT IS NOT A VALID AMOUNT, IT MUST BE IN FORMAT '6.9' WITH THE VALUE YOU DESIRE"
+--     Just amount -> return amount
 
 selectIterations :: ErrorMessage -> IO Int
 selectIterations error = do

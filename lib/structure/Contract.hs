@@ -4,7 +4,7 @@ import Asset (Amount)
 import Book (Price)
 import Trade (Trade)
 
-type Beta = Int
+type Beta = Double
 type Trigger = Double
 
 data Contract
