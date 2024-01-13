@@ -26,7 +26,7 @@ renderLoop = do
   renderer <- get
   let menu = rMenu renderer
       id = mId menu
-  liftIO clearScreen
+  liftIO $ clearScreen >> putStr "\r"
   navigation <- renderMenu menu
   case navigation of
     Exit -> liftIO exitSuccess
@@ -49,7 +49,9 @@ renderMenu menu = do
   maybe <- liftIO $ readEntry entries
   case maybe of
     Nothing -> do
-      liftIO $ clearScreen >> putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
+      liftIO $ do
+        clearScreen >> putStr "\r"
+        putStrLn "INVALID OPTION..PLEASE ENTER A VALID NUMBER"
       renderMenu menu
     Just entry -> do
       let sim = eSimulation entry

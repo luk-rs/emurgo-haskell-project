@@ -8,7 +8,9 @@ import System.IO (hGetBuffering, hSetBuffering, stdin, stdout)
 type ErrorMessage = String
 
 handlingError :: ErrorMessage -> IO ()
-handlingError error = clearScreen >> unless (null error) (putStrLn error)
+handlingError error = do
+  clearScreen >> putStr "\r"
+  unless (null error) (putStrLn error)
 
 toMap :: [a] -> (a -> b) -> [(b, a)]
 toMap [] _ = []
@@ -31,7 +33,7 @@ flush :: Restore -> IO ()
 flush restore = do
   hSetBuffering stdout $ rStdoutBuffer restore
   hSetBuffering stdin $ rStdinBuffer restore
-  clearScreen
+  clearScreen >> putStr "\r"
 
 data Restore = Restore
   { rStdinBuffer :: BufferMode

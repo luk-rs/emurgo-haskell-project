@@ -3,12 +3,21 @@ module Book where
 import System.Random (randomIO, randomRIO)
 import Ticker (Ticker (ADA, BTC), priceFor)
 
+-- import Data.String.CSV
+import Text.ParserCombinators.Parsec (parseFromFile)
+
 type Price = Double
 
-data Book = Book
-  { bBtc :: Price
-  , bAda :: Price
-  }
+data Book
+  = Book
+      { bBtc :: Price
+      , bAda :: Price
+      }
+  | CsvBook
+      { bBtc :: Price
+      , bAda :: Price
+      , bCsv :: [Price]
+      }
 
 randomizePrice :: Price -> IO Price
 randomizePrice prev = do
@@ -33,11 +42,11 @@ bookFromRandom book = do
   let prevBtc = bBtc book
   randomBtc <- randomizePrice prevBtc
   let prevAda = bAda book
-  -- randomAda <- randomizePrice prevAda
+  randomAda <- randomizePrice prevAda
   return
     Book
       { bBtc = randomBtc
-      , bAda = prevAda -- todo fix me
+      , bAda = randomAda
       }
 
 initialBook :: IO Book

@@ -47,6 +47,8 @@ library
     , base           ^>=4.17.2.0
     , containers
     , mtl
+    , pandoc
+    , parsec
     , random
 
   hs-source-dirs:   lib lib/rendering lib/structure lib/simulations
