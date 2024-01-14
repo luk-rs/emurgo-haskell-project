@@ -8,7 +8,7 @@ import Entry (Entry (..), Label)
 -- import Inspection (inspectTrades)
 
 import Control.Monad.RWS (MonadIO (liftIO))
-import Inspection (inspectMeanPrice)
+import Inspection (inspectMeanPrice, inspectTotals)
 import Navigation (Navigation (..), NavigationId)
 import Sifo (autoSifo)
 import Simulation (Simulation)
@@ -60,6 +60,8 @@ simInspection =
             liftIO pressAnyKey
             return (Forward 2) -- inspectTrades
         , newEntry 2 "Final total valuations" $ do
+            inspectTotals
+            liftIO pressAnyKey
             return (Forward 2)
         , newEntry 3 "Export partial valuations to csv"
             $ do

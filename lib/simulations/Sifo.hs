@@ -1,7 +1,7 @@
 module Sifo where
 
 import Control.Concurrent (threadDelay)
-import Control.Monad.RWS (MonadState (get), asks, foldM_, forM, forM_, gets, modify, unless, void, when)
+import Control.Monad.RWS (MonadState (get), asks, foldM_, forM, forM_, gets, modify, modify', unless, void, when)
 import Control.Monad.Reader (MonadIO (liftIO))
 import GHC.IO.Handle (hWaitForInput)
 import Generics (ErrorMessage, handlingError, pressAnyKey)
@@ -45,7 +45,16 @@ subscribeContract beta trigger ticker amount (Book p1 _) = do
   let crypto = amount * beta / 100 / p1
       stable = amount * (100 - beta) / 100
   modify $ \account ->
-    let subscription = Contract{cBtc = crypto, cIusd = stable, cBeta = beta, cTrigger = trigger / 100, cMeanBtcPrice = p1}
+    let subscription =
+          Contract
+            { cBtc = crypto
+            , cIusd = stable
+            , cBeta = beta
+            , cTrigger = trigger / 100
+            , cMeanBtcPrice = p1
+            , cMaxPrice = p1
+            , cMinPrice = p1
+            }
      in account
           { acStake = Asset{aTicker = ticker, aPrice = p1, aBalance = amount}
           , acContract = subscription
@@ -57,7 +66,7 @@ runIteration prevBook@(Book p0 _) = do
   -- liftIO $ hWaitForInput stdin 500
   market <- asks randomizeBookIO
   newBook@(Book p1 _) <- liftIO $ market prevBook
-  contract@(Contract q0 c0 beta a _) <- gets acContract
+  contract@(Contract q0 c0 beta a _ _ _) <- gets acContract
   let q0p1 = q0 * p1
       betaC0 = beta * c0
       pStable = 100 - beta
@@ -71,25 +80,39 @@ runIteration prevBook@(Book p0 _) = do
     else when buyTrigger $ do
       let q' = (betaC0 - pStable * q0p1) / p1'
       buyBtc q' newBook
+  updateBoundaries newBook
   return newBook
+
+updateBoundaries :: Book -> Simulation ()
+updateBoundaries (Book p' _) = do
+  contract@(Contract _ _ _ _ _ max min) <- gets acContract
+  modify $ \account ->
+    account
+      { acContract =
+          contract
+            { cMaxPrice = if p' > max then p' else max
+            , cMinPrice = if p' < min then p' else min
+            }
+      }
+  return ()
 
 buyBtc :: Double -> Book -> Simulation ()
 buyBtc q' book@(Book p1 _) = do
-  contract@(Contract q0 c0 _ _ pm0) <- gets acContract
+  contract@(Contract q0 c0 _ _ pm0 _ _) <- gets acContract
   let q1 = q0 + q'
       c1 = c0 - q' * p1
       pm1 = (pm0 * q0 + p1 * q') / q1
   modify $ \account -> account{acContract = contract{cBtc = q1, cIusd = c1, cMeanBtcPrice = pm1}}
-  contract@(Contract q0 c0 _ _ _) <- gets acContract
+  contract@(Contract q0 c0 _ _ _ _ _) <- gets acContract
   printTrade "Buying BTC" contract book
 
 sellBtc :: Double -> Book -> Simulation ()
 sellBtc q' book@(Book p1 _) = do
-  contract@(Contract q0 c0 _ _ _) <- gets acContract
+  contract@(Contract q0 c0 _ _ _ _ _) <- gets acContract
   let q1 = q0 - q'
       c1 = c0 + q' * p1
   modify $ \account -> account{acContract = contract{cBtc = q1, cIusd = c1}}
-  contract@(Contract q0 c0 _ _ _) <- gets acContract
+  contract@(Contract q0 c0 _ _ _ _ _) <- gets acContract
   printTrade "Selling BTC" contract book
 
 printBook :: Book -> Book -> Double -> IO ()
@@ -102,8 +125,8 @@ printBook (Book p0 _) (Book p1 _) trigger = do
   putStrLn ""
 
 printTrade :: String -> Contract -> Book -> Simulation ()
-printTrade message (Contract q0 c0 _ _ pm0) (Book p1 _) = do
-  (Contract q0 c0 _ _ _) <- gets acContract
+printTrade message (Contract q0 c0 _ _ pm0 _ _) (Book p1 _) = do
+  (Contract q0 c0 _ _ _ _ _) <- gets acContract
   liftIO $ do
     putStrLn message
     putStrLn $ "(BTC, IUSD) => (" <> show q0 <> ", " <> show c0 <> ") => (" <> show q0 <> ", " <> show c0 <> ")"

@@ -14,5 +14,7 @@ data Contract
       , cBeta :: Beta
       , cTrigger :: Trigger
       , cMeanBtcPrice :: Price
+      , cMaxPrice :: Price
+      , cMinPrice :: Price
       }
   | Unsubscribed
